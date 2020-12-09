@@ -21,17 +21,17 @@ import (
 
 type SFTPConf struct {
 	// Host server
-	Host string
+	Host string `json:"host"`
 	// User for authenticate
-	User string
+	User string `json:"user"`
 	// Password for authenticate
-	Password string
+	Password string `json:"pass"`
 	// Bucket name of the target S3 folder
-	Bucket string
+	Bucket string `json:"bucket"`
 	// Port of the host
-	Port int
+	Port int `json:"port"`
 	// Timeout in seconds for the connection
-	Timeout int
+	Timeout int `json:"timeout"`
 }
 
 func (c *SFTPConf) Validate() {
