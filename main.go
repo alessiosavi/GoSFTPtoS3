@@ -20,18 +20,12 @@ import (
 )
 
 type SFTPConf struct {
-	// Host server
-	Host string `json:"host"`
-	// User for authenticate
-	User string `json:"user"`
-	// Password for authenticate
+	Host     string `json:"host"`
+	User     string `json:"user"`
 	Password string `json:"pass"`
-	// Bucket name of the target S3 folder
-	Bucket string `json:"bucket"`
-	// Port of the host
-	Port int `json:"port"`
-	// Timeout in seconds for the connection
-	Timeout int `json:"timeout"`
+	Bucket   string `json:"bucket"`
+	Port     int    `json:"port"`
+	Timeout  int    `json:"timeout"`
 }
 
 func (c *SFTPConf) Validate() {
@@ -59,11 +53,11 @@ type SFTPClient struct {
 }
 
 // Create a new SFTP connection by given parameters
-func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
+func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	var sess *session.Session
 	var err error
 	var conn *ssh.Client
-	sftpConf.Validate() // Panic in case of missing configuration
+	c.Validate() // Panic in case of missing configuration
 
 	// initialize AWS Session
 	if sess, err = session.NewSession(); err != nil {
@@ -76,14 +70,14 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	}
 
 	config := &ssh.ClientConfig{
-		User:            sftpConf.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(sftpConf.Password)},
+		User:            c.User,
+		Auth:            []ssh.AuthMethod{ssh.Password(c.Password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Duration(sftpConf.Timeout) * time.Second,
+		Timeout:         time.Duration(c.Timeout) * time.Second,
 	}
 	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
 	// connect to ssh
-	addr := fmt.Sprintf("%s:%d", sftpConf.Host, sftpConf.Port)
+	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
 	log.Println("Connecting to: " + addr)
 	if conn, err = ssh.Dial("tcp", addr, config); err != nil {
 		return nil, err
@@ -94,7 +88,7 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SFTPClient{AWSSession: sess, Client: client, Bucket: sftpConf.Bucket}, nil
+	return &SFTPClient{AWSSession: sess, Client: client, Bucket: c.Bucket}, nil
 }
 
 func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
