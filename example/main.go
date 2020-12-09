@@ -39,5 +39,4 @@ func main() {
 func renameFile(fName string) string {
 	s := strings.Split(fName, "/")
 	return stringutils.JoinSeparator("/", s[1:]...)
-
 }

@@ -41,8 +41,8 @@ func (c *SFTPConf) Validate() {
 	if stringutils.IsBlank(c.Bucket) {
 		panic("SFTP bucket not provided")
 	}
-	if httputils.ValidatePort(c.Port) {
-		panic("SFTP host not provided")
+	if !httputils.ValidatePort(c.Port) {
+		panic("SFTP port not provided")
 	}
 }
 
@@ -57,6 +57,7 @@ func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	var sess *session.Session
 	var err error
 	var conn *ssh.Client
+
 	c.Validate() // Panic in case of missing configuration
 
 	// initialize AWS Session
@@ -144,4 +145,9 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, s3session *s3.S3, f func
 			}
 		}
 	}
+}
+
+func RenameFile(fName string) string {
+	s := strings.Split(fName, "/")
+	return stringutils.JoinSeparator("/", s[1:]...)
 }
