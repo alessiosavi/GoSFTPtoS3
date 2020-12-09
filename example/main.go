@@ -15,7 +15,7 @@ func main() {
 		User:     "demo",
 		Password: "password",
 		Port:     22,
-		Bucket:   "thom-browne-ftp",
+		Bucket:   "bucket-ftp",
 		Timeout:  5,
 	}
 

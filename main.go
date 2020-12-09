@@ -3,6 +3,7 @@ package GoSFTPtoS3
 import (
 	"bytes"
 	"fmt"
+	httputils "github.com/alessiosavi/GoGPUtils/http"
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -33,6 +34,24 @@ type SFTPConf struct {
 	Timeout int
 }
 
+func (c *SFTPConf) Validate() {
+	if stringutils.IsBlank(c.Host) {
+		panic("SFTP host not provided")
+	}
+	if stringutils.IsBlank(c.User) {
+		panic("SFTP user not provided")
+	}
+	if stringutils.IsBlank(c.Password) {
+		panic("SFTP password not provided")
+	}
+	if stringutils.IsBlank(c.Bucket) {
+		panic("SFTP bucket not provided")
+	}
+	if httputils.ValidatePort(c.Port) {
+		panic("SFTP host not provided")
+	}
+}
+
 type SFTPClient struct {
 	AWSSession *session.Session
 	Client     *sftp.Client
@@ -44,11 +63,7 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	var sess *session.Session
 	var err error
 	var conn *ssh.Client
-	if sftpConf == nil || stringutils.IsBlank(sftpConf.Host) || stringutils.IsBlank(sftpConf.User) ||
-		stringutils.IsBlank(sftpConf.Password) || stringutils.IsBlank(sftpConf.Bucket) ||
-		sftpConf.Port < 22 || sftpConf.Port > 65535 {
-		panic("invalid credentials")
-	}
+	sftpConf.Validate() // Panic in case of missing configuration
 
 	// initialize AWS Session
 	if sess, err = session.NewSession(); err != nil {
