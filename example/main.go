@@ -11,11 +11,11 @@ import (
 
 func main() {
 	var sftpConf = &GoSFTPtoS3.SFTPConf{
-		Host:     "host",
-		User:     "user",
+		Host:     "test.rebex.net",
+		User:     "demo",
 		Password: "password",
 		Port:     22,
-		Bucket:   "bucketTarget",
+		Bucket:   "thom-browne-ftp",
 		Timeout:  5,
 	}
 
@@ -30,7 +30,7 @@ func main() {
 		panic(err)
 	}
 	s3session := s3.New(sess)
-	conn.PutToS3("get", s3session, renameFile)
+	conn.PutToS3("", "CUSTOM_PREFIX", s3session, renameFile)
 }
 
 // renameFile is a custom function delegated to rename the file before writing to S3

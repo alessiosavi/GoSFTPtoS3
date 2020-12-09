@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -56,7 +57,7 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 
 	get, err := sess.Config.Credentials.Get()
 	if err == nil {
-		fmt.Printf("Using the following credentials: %+v\n", get)
+		log.Printf("Using the following credentials: %+v\n", get)
 	}
 
 	config := &ssh.ClientConfig{
@@ -66,7 +67,7 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 		Timeout:         time.Duration(sftpConf.Timeout) * time.Second,
 	}
 	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
-	// connet to ssh
+	// connect to ssh
 	addr := fmt.Sprintf("%s:%d", sftpConf.Host, sftpConf.Port)
 	log.Println("Connecting to: " + addr)
 	if conn, err = ssh.Dial("tcp", addr, config); err != nil {
@@ -82,45 +83,55 @@ func (sftpConf *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 }
 
 func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
-	fmt.Println("Downloading file: " + remoteFile)
+	log.Println("Downloading file: " + remoteFile)
 	srcFile, err := c.Client.Open(remoteFile)
 	if err != nil {
 		return nil, err
 	}
+	defer srcFile.Close()
 	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, srcFile)
-	srcFile.Close()
 	return buf, err
 }
 
 // PutToS3 is delegated to load the
-func (c *SFTPClient) PutToS3(folderName string, s3session *s3.S3, f func(fName string) string) {
+func (c *SFTPClient) PutToS3(folderName, prefix string, s3session *s3.S3, f func(fName string) string) {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
-		fmt.Println(walker.Path())
-		if walker.Path() != folderName {
-			if err := walker.Err(); err != nil {
-				fmt.Println(err)
-				continue
+		if err := walker.Err(); err != nil {
+			log.Printf("Error with file: %s | Err: %s\n", walker.Path(), err)
+			continue
+		}
+
+		currentPath := walker.Path()
+		log.Println(currentPath)
+		temp := strings.Split(currentPath, "/")
+		fName := temp[len(temp)-1]
+
+		// Avoid to manage the first path (input parameter)
+		// If prefix provided, verify that the filename start with it
+		if currentPath == folderName || (!stringutils.IsBlank(prefix) && !strings.HasPrefix(fName, prefix)) {
+			log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
+			continue
+		}
+		// Recursive download all sub folder if the current filepath is a folder
+		if walker.Stat().IsDir() {
+			c.PutToS3(path.Join(currentPath), prefix, s3session, f)
+		} else {
+			get, err := c.Get(currentPath)
+			if err != nil {
+				panic(err)
 			}
-			if walker.Stat().IsDir() { // Recursive download all folder
-				c.PutToS3(path.Join(walker.Path()), s3session, f)
-			} else {
-				get, err := c.Get(walker.Path())
-				if err != nil {
-					panic(err)
-				}
-				// Save only the file name, not the path
-				s3FileName := f(walker.Path())
-				log.Println("Saving file in: " + s3FileName)
-				if _, err := s3session.PutObject(&s3.PutObjectInput{
-					Body:        bytes.NewReader(get.Bytes()),
-					Bucket:      aws.String(c.Bucket),
-					ContentType: aws.String(http.DetectContentType(get.Bytes())),
-					Key:         aws.String(s3FileName),
-				}); err != nil {
-					panic(err)
-				}
+			// Apply the given renaming function to rename the S3 file name
+			s3FileName := f(currentPath)
+			log.Println("Saving file in: " + s3FileName)
+			if _, err := s3session.PutObject(&s3.PutObjectInput{
+				Body:        bytes.NewReader(get.Bytes()),
+				Bucket:      aws.String(c.Bucket),
+				ContentType: aws.String(http.DetectContentType(get.Bytes())),
+				Key:         aws.String(s3FileName),
+			}); err != nil {
+				panic(err)
 			}
 		}
 	}
