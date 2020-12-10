@@ -30,7 +30,8 @@ func main() {
 		panic(err)
 	}
 	s3session := s3.New(sess)
-	conn.PutToS3("", "CUSTOM_PREFIX", s3session, renameFile)
+
+	conn.PutToS3("", "CUSTOM_PREFIX", "text/csv", s3session, renameFile)
 }
 
 // renameFile is a custom function delegated to rename the file before writing to S3

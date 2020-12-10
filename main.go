@@ -104,8 +104,14 @@ func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
 	return buf, err
 }
 
-// PutToS3 is delegated to load the
-func (c *SFTPClient) PutToS3(folderName, prefix string, s3session *s3.S3, f func(fName string) string) {
+// PutToS3 is delegated to download the file from the SFTP server and load into an S3 bucket
+// folderName: name of the SFTP folder (use an empty string for scan all the folder present)
+// predix: optional prefix; filter only the file that start with the given prefix
+// s3session: aws S3 session object in order to connect to the bucket
+// f: function delegated to rename the file to save in the S3 bucket.
+//  If no modification are needed, use a function that return the input parameter as following:
+//  func rename(fName string)string{return fName}
+func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, s3session *s3.S3, renameFile func(fName string) string) {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -126,19 +132,22 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, s3session *s3.S3, f func
 		}
 		// Recursive download all sub folder if the current filepath is a folder
 		if walker.Stat().IsDir() {
-			c.PutToS3(path.Join(currentPath), prefix, s3session, f)
+			c.PutToS3(path.Join(currentPath), prefix, contentType, s3session, renameFile)
 		} else {
 			get, err := c.Get(currentPath)
 			if err != nil {
 				panic(err)
 			}
 			// Apply the given renaming function to rename the S3 file name
-			s3FileName := f(currentPath)
+			s3FileName := renameFile(currentPath)
 			log.Println("Saving file in: " + s3FileName)
+			if stringutils.IsBlank(contentType) {
+				contentType = http.DetectContentType(get.Bytes())
+			}
 			if _, err := s3session.PutObject(&s3.PutObjectInput{
 				Body:        bytes.NewReader(get.Bytes()),
 				Bucket:      aws.String(c.Bucket),
-				ContentType: aws.String(http.DetectContentType(get.Bytes())),
+				ContentType: aws.String(contentType),
 				Key:         aws.String(s3FileName),
 			}); err != nil {
 				panic(err)
