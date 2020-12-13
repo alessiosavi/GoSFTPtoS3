@@ -140,7 +140,7 @@ func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, s3session *
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
-			log.Println("Saving file in: " + s3FileName)
+			log.Printf("Saving file in: %s/%s\n", c.Bucket, s3FileName)
 			if stringutils.IsBlank(contentType) {
 				contentType = http.DetectContentType(get.Bytes())
 			}
