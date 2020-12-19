@@ -8,7 +8,6 @@ import (
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"io"
 	"log"
 	"net/http"
@@ -48,28 +47,22 @@ func (c *SFTPConf) Validate() {
 }
 
 type SFTPClient struct {
-	AWSSession *session.Session
+	AWSSession *aws.Config
 	Client     *sftp.Client
 	Bucket     string
 }
 
 // Create a new SFTP connection by given parameters
 func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
-	var sess *session.Session
 	var err error
 	var conn *ssh.Client
 
 	c.Validate() // Panic in case of missing configuration
 
 	// initialize AWS Session
-	if sess, err = session.NewSession(); err != nil {
-		panic(err)
-	}
+	newConfig := aws.NewConfig()
 
-	get, err := sess.Config.Credentials.Get()
-	if err == nil {
-		log.Printf("Using the following credentials: %+v\n", get)
-	}
+	log.Printf("Using the following credentials: %+v\n", newConfig.Credentials)
 
 	config := &ssh.ClientConfig{
 		User:            c.User,
@@ -90,7 +83,7 @@ func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SFTPClient{AWSSession: sess, Client: client, Bucket: c.Bucket}, nil
+	return &SFTPClient{AWSSession: newConfig, Client: client, Bucket: c.Bucket}, nil
 }
 
 func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {

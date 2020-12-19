@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/alessiosavi/GoGPUtils v0.0.30
-	github.com/aws/aws-sdk-go v1.36.12
 	github.com/aws/aws-sdk-go-v2 v0.30.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v0.30.0
 	github.com/pkg/sftp v1.12.0
