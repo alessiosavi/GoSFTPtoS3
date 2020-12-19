@@ -2,11 +2,13 @@ package GoSFTPtoS3
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	httputils "github.com/alessiosavi/GoGPUtils/http"
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"io"
 	"log"
 	"net/http"
@@ -14,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -111,7 +112,7 @@ func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
 // f: function delegated to rename the file to save in the S3 bucket.
 //  If no modification are needed, use a function that return the input parameter as following:
 //  func rename(fName string)string{return fName}
-func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, s3session *s3.S3, renameFile func(fName string) string) {
+func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, s3session *s3.Client, renameFile func(fName string) string) {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -144,7 +145,7 @@ func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, s3session *
 			if stringutils.IsBlank(contentType) {
 				contentType = http.DetectContentType(get.Bytes())
 			}
-			if _, err := s3session.PutObject(&s3.PutObjectInput{
+			if _, err = s3session.PutObject(context.Background(), &s3.PutObjectInput{
 				Body:        bytes.NewReader(get.Bytes()),
 				Bucket:      aws.String(c.Bucket),
 				ContentType: aws.String(contentType),
