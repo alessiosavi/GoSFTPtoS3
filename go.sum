@@ -1,5 +1,6 @@
 github.com/alessiosavi/GoGPUtils v0.0.29 h1:ebJFc3x2HHaCEJWaUkQ7hHeom3PFR8bPwCcOiUDay24=
 github.com/alessiosavi/GoGPUtils v0.0.29/go.mod h1:DRI9kEkT/ZZdHr+ESFOMfqWPHsO9WgjzyVXdfOGN83M=
+github.com/alessiosavi/GoGPUtils v0.0.30/go.mod h1:DRI9kEkT/ZZdHr+ESFOMfqWPHsO9WgjzyVXdfOGN83M=
 github.com/alessiosavi/ahocorasick v0.0.3/go.mod h1:GlX7JXZTgFoEccsMg5JZVpjoe+NW7Nk+3b5ldtGP5oU=
 github.com/aws/aws-sdk-go v1.36.4 h1:yCP3uadI564OvYtWbG2pyKK/J3cTG5NnAGWBH4Cx9wI=
 github.com/aws/aws-sdk-go v1.36.4/go.mod h1:hcU610XS61/+aQV88ixoOzUoG7v3b31pl2zKMmprdro=
