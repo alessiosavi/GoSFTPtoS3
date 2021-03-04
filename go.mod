@@ -3,7 +3,7 @@ module github.com/alessiosavi/GoSFTPtoS3
 go 1.15
 
 require (
-	github.com/alessiosavi/GoGPUtils v0.0.30
+	github.com/alessiosavi/GoGPUtils v0.0.39
 	github.com/aws/aws-sdk-go v1.37.18
 	github.com/pkg/sftp v1.12.0
 	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
