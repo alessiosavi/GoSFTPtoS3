@@ -3,9 +3,6 @@ package main
 import (
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"github.com/alessiosavi/GoSFTPtoS3"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"strings"
 )
 
@@ -24,14 +21,9 @@ func main() {
 		panic(err)
 	}
 	// Init the default configuration and initialize a new session
-	awsConfig := aws.Config{Region: aws.String("us-east-2")}
-	sess, err := session.NewSessionWithOptions(session.Options{Config: awsConfig})
-	if err != nil {
+	if err = conn.PutToS3("", "CUSTOM_PREFIX", "text/csv", renameFile); err != nil {
 		panic(err)
 	}
-	s3session := s3.New(sess)
-
-	conn.PutToS3("", "CUSTOM_PREFIX", "text/csv", s3session, renameFile)
 }
 
 // renameFile is a custom function delegated to rename the file before writing to S3
