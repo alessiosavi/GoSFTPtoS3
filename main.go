@@ -8,7 +8,6 @@ import (
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"io"
 	"log"
-	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -99,7 +98,7 @@ func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
 // f: function delegated to rename the file to save in the S3 bucket.
 //  If no modification are needed, use a function that return the input parameter as following:
 //  func rename(fName string)string{return fName}
-func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, renameFile func(fName string) string) error {
+func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, renameFile func(fName string) string) error {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -108,19 +107,26 @@ func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, renameFile 
 		}
 
 		currentPath := walker.Path()
-		log.Println(currentPath)
-		temp := strings.Split(currentPath, "/")
-		fName := temp[len(temp)-1]
+		var ignoreFile bool = false
+		for _, ignore := range ignores {
+			if strings.Contains(strings.ToLower(currentPath), strings.ToLower(ignore)) {
+				log.Printf("Avoid to manage file [%s] due to ignore [%s]\n", currentPath, ignore)
+				ignoreFile = true
+				break
+			}
+		}
+
+		fName := path.Base(currentPath)
 
 		// Avoid to manage the first path (input parameter)
 		// If prefix provided, verify that the filename start with it
-		if currentPath == folderName || (!stringutils.IsBlank(prefix) && !strings.HasPrefix(fName, prefix)) {
+		if currentPath == folderName || ignoreFile || (!stringutils.IsBlank(prefix) && !strings.HasPrefix(fName, prefix)) {
 			log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
 			continue
 		}
-		// Recursive download all sub folder if the current filepath is a folder
+		// If the current filepath is a folder, recursive download all sub folder
 		if walker.Stat().IsDir() {
-			if err := c.PutToS3(path.Join(currentPath), prefix, contentType, renameFile); err != nil {
+			if err := c.PutToS3(path.Join(currentPath), prefix, ignores, renameFile); err != nil {
 				return err
 			}
 		} else {
@@ -131,9 +137,7 @@ func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, renameFile 
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
 			log.Println("Saving file in: " + s3FileName)
-			if stringutils.IsBlank(contentType) {
-				contentType = http.DetectContentType(get.Bytes())
-			}
+
 			if err = s3utils.PutObject(c.Bucket, s3FileName, get.Bytes()); err != nil {
 				return err
 			}
@@ -142,6 +146,9 @@ func (c *SFTPClient) PutToS3(folderName, prefix, contentType string, renameFile 
 	return nil
 }
 
+// Example function for rename the file before upload to S3
+// In this case we remove the first folder from the name
+// Example: first_folder/second_folder/file_name.txt --> second_folder/file_name.txt
 func RenameFile(fName string) string {
 	s := strings.Split(fName, "/")
 	return stringutils.JoinSeparator("/", s[1:]...)
