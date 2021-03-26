@@ -2,6 +2,7 @@ package GoSFTPtoS3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	s3utils "github.com/alessiosavi/GoGPUtils/aws/S3"
 	httputils "github.com/alessiosavi/GoGPUtils/http"
@@ -152,4 +153,19 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, rename
 func RenameFile(fName string) string {
 	s := strings.Split(fName, "/")
 	return stringutils.JoinSeparator("/", s[1:]...)
+}
+
+func (c *SFTPClient) DeleteFile(path string) error {
+	if exists, err := c.Exist(path); err != nil {
+		return err
+	} else if exists {
+		return c.Client.Remove(path)
+	} else {
+		return errors.New(fmt.Sprintf("file %s does not exists", path))
+	}
+}
+
+func (c *SFTPClient) Exist(path string) (bool, error) {
+	_, err := c.Client.Lstat(path)
+	return err != nil, err
 }
