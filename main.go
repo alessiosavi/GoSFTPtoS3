@@ -26,22 +26,23 @@ type SFTPConf struct {
 	Timeout  int    `json:"timeout"`
 }
 
-func (c *SFTPConf) Validate() {
+func (c *SFTPConf) Validate() error {
 	if stringutils.IsBlank(c.Host) {
-		panic("SFTP host not provided")
+		return errors.New("SFTP host not provided")
 	}
 	if stringutils.IsBlank(c.User) {
-		panic("SFTP user not provided")
+		return errors.New("SFTP user not provided")
 	}
 	if stringutils.IsBlank(c.Password) {
-		panic("SFTP password not provided")
+		return errors.New("SFTP password not provided")
 	}
 	if stringutils.IsBlank(c.Bucket) {
-		panic("SFTP bucket not provided")
+		return errors.New("SFTP bucket not provided")
 	}
 	if !httputils.ValidatePort(c.Port) {
-		panic("SFTP port not provided")
+		return errors.New("SFTP port not provided")
 	}
+	return nil
 }
 
 type SFTPClient struct {
@@ -49,15 +50,16 @@ type SFTPClient struct {
 	Bucket string
 }
 
-// Create a new SFTP connection by given parameters
+// NewConn Create a new SFTP connection by given parameters
 func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
 	var err error
 	var conn *ssh.Client
 
-	c.Validate() // Panic in case of missing configuration
+	if err = c.Validate(); err != nil {
+		return nil, err
+	}
 
 	// initialize AWS Session
-
 	config := &ssh.ClientConfig{
 		User:            c.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(c.Password)},
@@ -133,7 +135,7 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, rename
 		} else {
 			get, err := c.Get(currentPath)
 			if err != nil {
-				panic(err)
+				return err
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
@@ -147,7 +149,7 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, rename
 	return nil
 }
 
-// Example function for rename the file before upload to S3
+// RenameFile Example function for rename the file before upload to S3
 // In this case we remove the first folder from the name
 // Example: first_folder/second_folder/file_name.txt --> second_folder/file_name.txt
 func RenameFile(fName string) string {
