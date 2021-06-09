@@ -21,7 +21,7 @@ func main() {
 		panic(err)
 	}
 	// Init the default configuration and initialize a new session
-	if err = conn.PutToS3("", "CUSTOM_PREFIX", "text/csv", renameFile); err != nil {
+	if err = conn.PutToS3("", "CUSTOM_PREFIX", nil, renameFile); err != nil {
 		panic(err)
 	}
 }
