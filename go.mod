@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/alessiosavi/GoGPUtils v0.0.63
 	github.com/pkg/sftp v1.13.3
-	golang.org/x/crypto v0.0.0-20210920023735-84f357641f63
+	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/sys v0.0.0-20210921065528-437939a70204 // indirect
 )
 
