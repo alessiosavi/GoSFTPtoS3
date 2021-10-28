@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	arrayutils "github.com/alessiosavi/GoGPUtils/array"
 	s3utils "github.com/alessiosavi/GoGPUtils/aws/S3"
 	httputils "github.com/alessiosavi/GoGPUtils/http"
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
@@ -16,6 +17,8 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
+
+var DEFAULT_KEY_EXCHANGE_ALGO = []string{"diffie-hellman-group-exchange-sha256"}
 
 type SFTPConf struct {
 	Host     string `json:"host"`
@@ -36,6 +39,7 @@ func (c *SFTPConf) Validate() error {
 	if stringutils.IsBlank(c.Password) {
 		return errors.New("SFTP password not provided")
 	}
+	// FIXME: Maybe this can be blank for usage different for sync SSH/SFTP to S3
 	if stringutils.IsBlank(c.Bucket) {
 		return errors.New("SFTP bucket not provided")
 	}
@@ -48,50 +52,6 @@ func (c *SFTPConf) Validate() error {
 type SFTPClient struct {
 	Client *sftp.Client
 	Bucket string
-}
-
-// NewConn Create a new SFTP connection by given parameters
-func (c *SFTPConf) NewConn(keyExchanges []string) (*SFTPClient, error) {
-	var err error
-	var conn *ssh.Client
-
-	if err = c.Validate(); err != nil {
-		return nil, err
-	}
-
-	// initialize AWS Session
-	config := &ssh.ClientConfig{
-		User:            c.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(c.Password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Duration(c.Timeout) * time.Second,
-	}
-	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
-	// connect to ssh
-	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
-	log.Println("Connecting to: " + addr)
-	if conn, err = ssh.Dial("tcp", addr, config); err != nil {
-		return nil, err
-	}
-
-	// create sftp client
-	client, err := sftp.NewClient(conn)
-	if err != nil {
-		return nil, err
-	}
-	return &SFTPClient{Client: client, Bucket: c.Bucket}, nil
-}
-
-func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
-	log.Println("Downloading file: " + remoteFile)
-	srcFile, err := c.Client.Open(remoteFile)
-	if err != nil {
-		return nil, err
-	}
-	defer srcFile.Close()
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, srcFile)
-	return buf, err
 }
 
 // PutToS3 is delegated to download the file from the SFTP server and load into an S3 bucket
@@ -156,6 +116,74 @@ func RenameFile(fName string) string {
 	return stringutils.JoinSeparator("/", s[1:]...)
 }
 
+//NewConn Create a new SFTP connection by given parameters
+func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Add default key exchange algorithm
+	for _, algo := range DEFAULT_KEY_EXCHANGE_ALGO {
+		if !arrayutils.InStrings(keyExchanges, algo) {
+			keyExchanges = append(keyExchanges, algo)
+		}
+	}
+
+	config := &ssh.ClientConfig{
+		User:            c.User,
+		Auth:            []ssh.AuthMethod{ssh.Password(c.Password)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         time.Duration(c.Timeout) * time.Second,
+	}
+
+	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
+	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
+	log.Println("Connecting to: " + addr)
+	conn, err := ssh.Dial("tcp", addr, config)
+	if err != nil {
+		return nil, err
+	}
+	client, err := sftp.NewClient(conn) // create sftp client
+	if err != nil {
+		return nil, err
+	}
+	return &SFTPClient{Client: client}, nil
+}
+
+func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
+	srcFile, err := c.Client.Open(remoteFile)
+	if err != nil {
+		return nil, err
+	}
+	defer srcFile.Close()
+	var buf *bytes.Buffer
+	_, err = io.Copy(buf, srcFile)
+	return buf, err
+}
+func (c *SFTPClient) Put(data []byte, fpath string) error {
+	dirname := path.Dir(fpath)
+	exist, err := c.Exist(dirname)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		if err := c.CreateDirectory(dirname); err != nil {
+			return err
+		}
+	}
+	f, err := c.Client.Create(fpath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	return err
+}
+
+func (c *SFTPClient) CreateDirectory(path string) error {
+	return c.Client.MkdirAll(path)
+}
+
 func (c *SFTPClient) DeleteFile(path string) error {
 	if exists, err := c.Exist(path); err != nil {
 		return err
@@ -166,7 +194,60 @@ func (c *SFTPClient) DeleteFile(path string) error {
 	}
 }
 
+func (c *SFTPClient) DeleteDirectory(path string) error {
+	return c.Client.RemoveDirectory(path)
+}
+
+func (c *SFTPClient) List(path string) ([]string, error) {
+	exist, err := c.Exist(path)
+	if err != nil {
+		return nil, err
+	} else if !exist {
+		return nil, errors.New(fmt.Sprintf("path %s does not exists!", path))
+	}
+	isDir, err := c.IsDir(path)
+	if err != nil {
+		return nil, err
+	}
+	if !isDir {
+		return nil, errors.New(fmt.Sprintf("path %s is not a dir!", path))
+	}
+
+	walker := c.Client.Walk(path)
+	var files []string
+	for walker.Step() {
+		if err = walker.Err(); err != nil {
+			log.Printf("Error with file: %s | Err: %s\n", walker.Path(), err)
+			continue
+		}
+		files = append(files, walker.Path())
+	}
+	return files, nil
+}
+
 func (c *SFTPClient) Exist(path string) (bool, error) {
 	_, err := c.Client.Lstat(path)
-	return err != nil, err
+	if err != nil && err.Error() == "file does not exist" {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (c *SFTPClient) IsDir(path string) (bool, error) {
+	lstat, err := c.Client.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+	return lstat.IsDir(), nil
+}
+func (c *SFTPClient) IsFile(path string) (bool, error) {
+	lstat, err := c.Client.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+	return !lstat.IsDir(), nil
+}
+
+func (c *SFTPClient) Close() error {
+	return c.Client.Close()
 }
