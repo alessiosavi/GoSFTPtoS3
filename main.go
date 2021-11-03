@@ -156,7 +156,7 @@ func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
 		return nil, err
 	}
 	defer srcFile.Close()
-	var buf *bytes.Buffer
+	buf := new(bytes.Buffer)
 	_, err = io.Copy(buf, srcFile)
 	return buf, err
 }
