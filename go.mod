@@ -6,7 +6,6 @@ require (
 	github.com/alessiosavi/GoGPUtils v0.0.72
 	github.com/pkg/sftp v1.13.4
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa
-	golang.org/x/sys v0.0.0-20211109184856-51b60fd695b3 // indirect
 )
 
 require (
@@ -29,5 +28,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	golang.org/x/net v0.0.0-20211109214657-ef0fda0de508 // indirect
+	golang.org/x/sys v0.0.0-20211109184856-51b60fd695b3 // indirect
 	golang.org/x/text v0.3.7 // indirect
 )
