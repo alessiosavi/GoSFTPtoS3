@@ -27,6 +27,7 @@ type SFTPConf struct {
 	Bucket   string `json:"bucket"`
 	Port     int    `json:"port"`
 	Timeout  int    `json:"timeout"`
+	PrivKey  string `json:"priv_key"`
 }
 
 func (c *SFTPConf) Validate() error {
@@ -36,8 +37,8 @@ func (c *SFTPConf) Validate() error {
 	if stringutils.IsBlank(c.User) {
 		return errors.New("SFTP user not provided")
 	}
-	if stringutils.IsBlank(c.Password) {
-		return errors.New("SFTP password not provided")
+	if stringutils.IsBlank(c.Password) && stringutils.IsBlank(c.PrivKey) {
+		return errors.New("SFTP password and priv_key not provided")
 	}
 	// FIXME: Maybe this can be blank for usage different for sync SSH/SFTP to S3
 	if stringutils.IsBlank(c.Bucket) {
@@ -128,10 +129,21 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 			keyExchanges = append(keyExchanges, algo)
 		}
 	}
+	var auth []ssh.AuthMethod
+
+	if !stringutils.IsBlank(c.PrivKey) {
+		key, err := ssh.ParsePrivateKey([]byte(c.PrivKey))
+		if err != nil {
+			return nil, err
+		}
+		auth = append(auth, ssh.PublicKeys(key))
+	} else if !stringutils.IsBlank(c.Password) && !stringutils.IsBlank(c.User) {
+		auth = append(auth, ssh.Password(c.Password))
+	}
 
 	config := &ssh.ClientConfig{
 		User:            c.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(c.Password)},
+		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         time.Duration(c.Timeout) * time.Second,
 	}
