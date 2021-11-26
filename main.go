@@ -38,7 +38,6 @@ func (c *SFTPConf) Validate() error {
 		return errors.New("SFTP user not provided")
 	}
 	if stringutils.IsBlank(c.Password) && stringutils.IsBlank(c.PrivKey) {
-		//if stringutils.IsBlank(c.Password) && c.PrivKey == nil {
 		return errors.New("SFTP password and priv_key not provided")
 	}
 	// FIXME: Maybe this can be blank for usage different for sync SSH/SFTP to S3
@@ -133,7 +132,6 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	var auth []ssh.AuthMethod
 
 	if !stringutils.IsBlank(c.PrivKey) {
-	//if c.PrivKey != nil {
 		key, err := ssh.ParsePrivateKey([]byte(c.PrivKey))
 		if err != nil {
 			return nil, err

@@ -52,15 +52,11 @@ func Test2() {
 
 	file, err := ioutil.ReadFile("/home/alessiosavi/.ssh/mykey.pem")
 	if err != nil {
-		return
+		panic(err)
 	}
 	sftpConf.PrivKey = string(file)
 
 	conn, err := sftpConf.NewConn()
-	if err != nil {
-		panic(err)
-	}
-
 	defer conn.Close()
 	list, err := conn.List("/tmp")
 	if err != nil {
