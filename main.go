@@ -232,7 +232,9 @@ func (c *SFTPClient) List(path string) ([]string, error) {
 			log.Printf("Error with file: %s | Err: %s\n", walker.Path(), err)
 			continue
 		}
-		files = append(files, walker.Path())
+		if walker.Path() != path {
+			files = append(files, walker.Path())
+		}
 	}
 	return files, nil
 }
