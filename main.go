@@ -41,9 +41,9 @@ func (c *SFTPConf) Validate() error {
 		return errors.New("SFTP password and priv_key not provided")
 	}
 	// FIXME: Maybe this can be blank for usage different for sync SSH/SFTP to S3
-	if stringutils.IsBlank(c.Bucket) {
-		return errors.New("SFTP bucket not provided")
-	}
+	//if stringutils.IsBlank(c.Bucket) {
+	//	return errors.New("SFTP bucket not provided")
+	//}
 	if !httputils.ValidatePort(c.Port) {
 		return errors.New("SFTP port not provided")
 	}
@@ -57,12 +57,12 @@ type SFTPClient struct {
 
 // PutToS3 is delegated to download the file from the SFTP server and load into an S3 bucket
 // folderName: name of the SFTP folder (use an empty string for scan all the folder present)
-// predix: optional prefix; filter only the file that start with the given prefix
+// prefix: optional prefix; filter only the file that start with the given prefix
 // s3session: aws S3 session object in order to connect to the bucket
 // f: function delegated to rename the file to save in the S3 bucket.
 //  If no modification are needed, use a function that return the input parameter as following:
 //  func rename(fName string)string{return fName}
-func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, renameFile func(fName string) string) error {
+func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, renameFile func(fName string) string) error {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -81,10 +81,9 @@ func (c *SFTPClient) PutToS3(folderName, prefix string, ignores []string, rename
 		}
 
 		fName := path.Base(currentPath)
-
 		// Avoid to manage the first path (input parameter)
 		// If prefix provided, verify that the filename start with it
-		if currentPath == folderName || ignoreFile || (!stringutils.IsBlank(prefix) && !strings.HasPrefix(fName, prefix)) {
+		if currentPath == folderName || ignoreFile || !stringutils.HasPrefixArray(prefix, fName) {
 			log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
 			continue
 		}
