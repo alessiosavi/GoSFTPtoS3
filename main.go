@@ -74,7 +74,7 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 		var ignoreFile bool = false
 		for _, ignore := range ignores {
 			if strings.Contains(strings.ToLower(currentPath), strings.ToLower(ignore)) {
-				log.Printf("Avoid to manage file [%s] due to ignore [%s]\n", currentPath, ignore)
+				//log.Printf("Avoid to manage file [%s] due to ignore [%s]\n", currentPath, ignore)
 				ignoreFile = true
 				break
 			}
@@ -84,7 +84,7 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 		// Avoid to manage the first path (input parameter)
 		// If prefix provided, verify that the filename start with it
 		if currentPath == folderName || ignoreFile || !stringutils.HasPrefixArray(prefix, fName) {
-			log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
+			//log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
 			continue
 		}
 		// If the current filepath is a folder, recursive download all sub folder
@@ -99,7 +99,7 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
-			log.Printf("Saving file in: Bucket: [%s] | Key: [%s]\n", c.Bucket, s3FileName)
+			log.Printf(fmt.Sprintf("Saving file %s in s3://%s/%s", currentPath, c.Bucket, s3FileName))
 			if err = s3utils.PutObject(c.Bucket, s3FileName, get.Bytes()); err != nil {
 				return err
 			}
