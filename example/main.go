@@ -25,7 +25,7 @@ func Test1() {
 	}
 	defer conn.Close()
 	// Init the default configuration and initialize a new session
-	if err = conn.PutToS3("", "CUSTOM_PREFIX", nil, renameFile); err != nil {
+	if err = conn.PutToS3("", nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
 		panic(err)
 	}
 }

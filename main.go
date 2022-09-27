@@ -10,6 +10,7 @@ import (
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"io"
 	"log"
+	"net"
 	"path"
 	"strings"
 	"time"
@@ -29,27 +30,6 @@ type SFTPConf struct {
 	Timeout  int    `json:"timeout"`
 	PrivKey  string `json:"priv_key"`
 }
-
-func (c *SFTPConf) Validate() error {
-	if stringutils.IsBlank(c.Host) {
-		return errors.New("SFTP host not provided")
-	}
-	if stringutils.IsBlank(c.User) {
-		return errors.New("SFTP user not provided")
-	}
-	if stringutils.IsBlank(c.Password) && stringutils.IsBlank(c.PrivKey) {
-		return errors.New("SFTP password and priv_key not provided")
-	}
-	// FIXME: Maybe this can be blank for usage different for sync SSH/SFTP to S3
-	//if stringutils.IsBlank(c.Bucket) {
-	//	return errors.New("SFTP bucket not provided")
-	//}
-	if !httputils.ValidatePort(c.Port) {
-		return errors.New("SFTP port not provided")
-	}
-	return nil
-}
-
 type SFTPClient struct {
 	Client *sftp.Client
 	Bucket string
@@ -60,8 +40,9 @@ type SFTPClient struct {
 // prefix: optional prefix; filter only the file that start with the given prefix
 // s3session: aws S3 session object in order to connect to the bucket
 // f: function delegated to rename the file to save in the S3 bucket.
-//  If no modification are needed, use a function that return the input parameter as following:
-//  func rename(fName string)string{return fName}
+//
+//	If no modification are needed, use a function that return the input parameter as following:
+//	func rename(fName string)string{return fName}
 func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, renameFile func(fName string) string) error {
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
@@ -108,6 +89,22 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 	return nil
 }
 
+func (c *SFTPConf) Validate() error {
+	if stringutils.IsBlank(c.Host) {
+		return errors.New("SFTP host not provided")
+	}
+	if stringutils.IsBlank(c.User) {
+		return errors.New("SFTP user not provided")
+	}
+	if stringutils.IsBlank(c.Password) && stringutils.IsBlank(c.PrivKey) {
+		return errors.New("SFTP password and priv_key not provided")
+	}
+	if !httputils.ValidatePort(c.Port) {
+		return errors.New("SFTP port not provided")
+	}
+	return nil
+}
+
 // RenameFile Example function for rename the file before upload to S3
 // In this case we remove the first folder from the name
 // Example: first_folder/second_folder/file_name.txt --> second_folder/file_name.txt
@@ -116,7 +113,7 @@ func RenameFile(fName string) string {
 	return stringutils.JoinSeparator("/", s[1:]...)
 }
 
-//NewConn Create a new SFTP connection by given parameters
+// NewConn Create a new SFTP connection by given parameters
 func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -148,7 +145,7 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	}
 
 	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
-	addr := fmt.Sprintf("%s:%d", c.Host, c.Port)
+	addr := net.JoinHostPort(c.Host, fmt.Sprintf("%d", c.Port))
 	log.Println("Connecting to: " + addr)
 	conn, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
@@ -201,7 +198,7 @@ func (c *SFTPClient) DeleteFile(path string) error {
 	} else if exists {
 		return c.Client.Remove(path)
 	} else {
-		return errors.New(fmt.Sprintf("file %s does not exists", path))
+		return fmt.Errorf("file %s does not exists", path)
 	}
 }
 
@@ -214,14 +211,14 @@ func (c *SFTPClient) List(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	} else if !exist {
-		return nil, errors.New(fmt.Sprintf("path %s does not exists!", path))
+		return nil, fmt.Errorf("path %s does not exists!", path)
 	}
 	isDir, err := c.IsDir(path)
 	if err != nil {
 		return nil, err
 	}
 	if !isDir {
-		return nil, errors.New(fmt.Sprintf("path %s is not a dir!", path))
+		return nil, fmt.Errorf("path %s is not a dir!", path)
 	}
 
 	walker := c.Client.Walk(path)
