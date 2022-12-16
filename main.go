@@ -261,3 +261,7 @@ func (c *SFTPClient) IsFile(path string) (bool, error) {
 func (c *SFTPClient) Close() error {
 	return c.Client.Close()
 }
+
+func (c *SFTPClient) Rename(fname, newName string) error {
+	return c.Client.Rename(fname, newName)
+}
