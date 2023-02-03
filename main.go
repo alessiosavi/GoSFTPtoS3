@@ -151,6 +151,7 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("Initializing new SFTP client @" + addr)
 	client, err := sftp.NewClient(conn) // create sftp client
 	if err != nil {
 		return nil, err
