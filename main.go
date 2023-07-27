@@ -43,7 +43,8 @@ type SFTPClient struct {
 //
 //	If no modification are needed, use a function that return the input parameter as following:
 //	func rename(fName string)string{return fName}
-func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, renameFile func(fName string) string) error {
+func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, renameFile func(fName string) string) ([]string, error) {
+	var fileProcessed []string
 	walker := c.Client.Walk(folderName)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
@@ -70,23 +71,24 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 		}
 		// If the current filepath is a folder, recursive download all sub folder
 		if walker.Stat().IsDir() {
-			if err := c.PutToS3(path.Join(currentPath), prefix, ignores, renameFile); err != nil {
-				return err
+			if _, err := c.PutToS3(path.Join(currentPath), prefix, ignores, renameFile); err != nil {
+				return nil, err
 			}
 		} else {
 			get, err := c.Get(currentPath)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
 			log.Printf(fmt.Sprintf("Saving file %s in s3://%s/%s", currentPath, c.Bucket, s3FileName))
 			if err = s3utils.PutObject(c.Bucket, s3FileName, get.Bytes()); err != nil {
-				return err
+				return nil, err
 			}
+			fileProcessed = append(fileProcessed, currentPath)
 		}
 	}
-	return nil
+	return fileProcessed, nil
 }
 
 func (c *SFTPConf) Validate() error {
@@ -112,6 +114,10 @@ func RenameFile(fName string) string {
 	s := strings.Split(fName, "/")
 	return stringutils.JoinSeparator("/", s[1:]...)
 }
+
+// FIXME: Use a time variable in order to perform logic related to the Time Execution
+// PSEUDOCODE:
+// While we have more than X seconds, retry to connect to the server.
 
 // NewConn Create a new SFTP connection by given parameters
 func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {

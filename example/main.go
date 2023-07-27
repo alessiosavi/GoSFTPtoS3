@@ -4,8 +4,8 @@ import (
 	"github.com/alessiosavi/GoGPUtils/helper"
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
 	"github.com/alessiosavi/GoSFTPtoS3"
-	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 )
 
@@ -25,7 +25,7 @@ func Test1() {
 	}
 	defer conn.Close()
 	// Init the default configuration and initialize a new session
-	if err = conn.PutToS3("", nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
+	if _, err = conn.PutToS3("", nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
 		panic(err)
 	}
 }
@@ -50,7 +50,7 @@ func Test2() {
 		PrivKey:  "",
 	}
 
-	file, err := ioutil.ReadFile("/home/alessiosavi/.ssh/mykey.pem")
+	file, err := os.ReadFile("/home/alessiosavi/.ssh/mykey.pem")
 	if err != nil {
 		panic(err)
 	}
