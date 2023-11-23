@@ -8,6 +8,7 @@ import (
 	s3utils "github.com/alessiosavi/GoGPUtils/aws/S3"
 	httputils "github.com/alessiosavi/GoGPUtils/http"
 	stringutils "github.com/alessiosavi/GoGPUtils/string"
+	"github.com/schollz/progressbar/v3"
 	"io"
 	"log"
 	"net"
@@ -25,53 +26,61 @@ type SFTPConf struct {
 	Host     string `json:"host"`
 	User     string `json:"user"`
 	Password string `json:"pass"`
-	Bucket   string `json:"bucket"`
 	Port     int    `json:"port"`
 	Timeout  int    `json:"timeout"`
 	PrivKey  string `json:"priv_key"`
 }
+
+func isIgnore(ignores []string, currentPath string) bool {
+	for _, ignore := range ignores {
+		if strings.Contains(strings.ToLower(currentPath), strings.ToLower(ignore)) {
+			return true
+		}
+	}
+	return false
+}
+
 type SFTPClient struct {
-	Client *sftp.Client
-	Bucket string
+	Client *sftp.Client `json:"client,omitempty"`
+	conn   *ssh.Client
 }
 
 // PutToS3 is delegated to download the file from the SFTP server and load into an S3 bucket
-// folderName: name of the SFTP folder (use an empty string for scan all the folder present)
-// prefix: optional prefix; filter only the file that start with the given prefix
-// s3session: aws S3 session object in order to connect to the bucket
-// f: function delegated to rename the file to save in the S3 bucket.
+// sftpFolder: name of the SFTP folder (use an empty string for scan all the folder present)
+// bucket: name of the bucket for copy the SFTP data
+// ignores, prefix:  ignore some files, filter only the files that start with the given prefix
+// renameFile: function delegated to rename the file to save in the S3 bucket. This function is necessary to give the possibility to rewrite
 //
+//				the SFTP filename with a given logic. func rename(fName string)string{return "CEGID/upload/SFTP_DATA_EXAMPLE/"+sftpFile}
 //	If no modification are needed, use a function that return the input parameter as following:
 //	func rename(fName string)string{return fName}
-func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, renameFile func(fName string) string) ([]string, error) {
+func (c SFTPClient) PutToS3(sftpFolder, bucket string, ignores, prefix []string, renameFile func(fName string) string) ([]string, error) {
 	var fileProcessed []string
-	walker := c.Client.Walk(folderName)
+	walker := c.Client.Walk(sftpFolder)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
 			log.Printf("Error with file: %s | Err: %s\n", walker.Path(), err)
 			continue
 		}
-
-		currentPath := walker.Path()
-		var ignoreFile bool = false
-		for _, ignore := range ignores {
-			if strings.Contains(strings.ToLower(currentPath), strings.ToLower(ignore)) {
-				//log.Printf("Avoid to manage file [%s] due to ignore [%s]\n", currentPath, ignore)
-				ignoreFile = true
-				break
-			}
+		var currentPath string
+		// Avoid to manage the first path (input parameter)
+		if currentPath = walker.Path(); currentPath == sftpFolder {
+			continue
 		}
 
 		fName := path.Base(currentPath)
-		// Avoid to manage the first path (input parameter)
 		// If prefix provided, verify that the filename start with it
-		if currentPath == folderName || ignoreFile || !stringutils.HasPrefixArray(prefix, fName) {
-			//log.Printf("Current file [%s] does not start with prefix [%s], skipping ...\n", fName, prefix)
+		if !stringutils.HasPrefixArray(prefix, fName) {
 			continue
 		}
+
+		if isIgnore(ignores, currentPath) {
+			continue
+		}
+
 		// If the current filepath is a folder, recursive download all sub folder
 		if walker.Stat().IsDir() {
-			if _, err := c.PutToS3(path.Join(currentPath), prefix, ignores, renameFile); err != nil {
+			if _, err := c.PutToS3(path.Join(currentPath), bucket, prefix, ignores, renameFile); err != nil {
 				return nil, err
 			}
 		} else {
@@ -81,8 +90,8 @@ func (c *SFTPClient) PutToS3(folderName string, ignores, prefix []string, rename
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
-			log.Printf(fmt.Sprintf("Saving file %s in s3://%s/%s", currentPath, c.Bucket, s3FileName))
-			if err = s3utils.PutObject(c.Bucket, s3FileName, get.Bytes()); err != nil {
+			log.Printf(fmt.Sprintf("Saving file %s in s3://%s/%s", currentPath, bucket, s3FileName))
+			if err = s3utils.PutObject(bucket, s3FileName, get.Bytes()); err != nil {
 				return nil, err
 			}
 			fileProcessed = append(fileProcessed, currentPath)
@@ -101,8 +110,13 @@ func (c *SFTPConf) Validate() error {
 	if stringutils.IsBlank(c.Password) && stringutils.IsBlank(c.PrivKey) {
 		return errors.New("SFTP password and priv_key not provided")
 	}
+
+	// Set Port 22 and 60s as timeout if not provided
 	if !httputils.ValidatePort(c.Port) {
-		return errors.New("SFTP port not provided")
+		(*c).Port = 22
+	}
+	if c.Timeout == 0 {
+		(*c).Timeout = 60
 	}
 	return nil
 }
@@ -115,12 +129,8 @@ func RenameFile(fName string) string {
 	return stringutils.JoinSeparator("/", s[1:]...)
 }
 
-// FIXME: Use a time variable in order to perform logic related to the Time Execution
-// PSEUDOCODE:
-// While we have more than X seconds, retry to connect to the server.
-
 // NewConn Create a new SFTP connection by given parameters
-func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
+func (c SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -133,6 +143,7 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 	}
 	var auth []ssh.AuthMethod
 
+	// Verify if the private key is provided. If not provided, try with username and password.
 	if !stringutils.IsBlank(c.PrivKey) {
 		key, err := ssh.ParsePrivateKey([]byte(c.PrivKey))
 		if err != nil {
@@ -141,6 +152,8 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 		auth = append(auth, ssh.PublicKeys(key))
 	} else if !stringutils.IsBlank(c.Password) && !stringutils.IsBlank(c.User) {
 		auth = append(auth, ssh.Password(c.Password))
+	} else {
+		panic("Credentials not provided. Provide PrivKey or User and password")
 	}
 
 	config := &ssh.ClientConfig{
@@ -152,80 +165,89 @@ func (c *SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 
 	config.Config.KeyExchanges = append(config.Config.KeyExchanges, keyExchanges...)
 	addr := net.JoinHostPort(c.Host, fmt.Sprintf("%d", c.Port))
-	log.Println("Connecting to: " + addr)
+	log.Printf("Dialing %s ...\n", addr)
 	conn, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
 		return nil, err
 	}
-	log.Println("Initializing new SFTP client @" + addr)
-	client, err := sftp.NewClient(conn) // create sftp client
+	log.Printf("Initializing new SFTP client to: %s@%s\n", c.User, addr)
+	client, err := sftp.NewClient(conn, sftp.UseFstat(true), sftp.MaxConcurrentRequestsPerFile(1)) // create sftp client
 	if err != nil {
 		return nil, err
 	}
-	return &SFTPClient{Client: client}, nil
+	return &SFTPClient{Client: client, conn: conn}, nil
 }
 
-func (c *SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
+func (c SFTPClient) Get(remoteFile string) (*bytes.Buffer, error) {
 	srcFile, err := c.Client.Open(remoteFile)
 	if err != nil {
 		return nil, err
 	}
-	defer srcFile.Close()
 	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, srcFile)
+	bar := progressbar.DefaultBytes(-1,
+		"Downloading file ", remoteFile,
+	)
+	_, err = io.Copy(io.MultiWriter(buf, bar), srcFile)
+	srcFile.Close()
+	bar.Close()
 	return buf, err
 }
-func (c *SFTPClient) Put(data []byte, fpath string) error {
+func (c SFTPClient) Put(data []byte, fpath string) error {
 	dirname := path.Dir(fpath)
-	exist, err := c.Exist(dirname)
-	if err != nil {
+	if exist, err := c.Exist(dirname); err != nil {
 		return err
-	}
-	if !exist {
-		if err := c.CreateDirectory(dirname); err != nil {
+	} else if !exist {
+		if err = c.CreateDirectory(dirname); err != nil {
 			return err
 		}
 	}
+
 	f, err := c.Client.Create(fpath)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(data)
+
+	bar := progressbar.DefaultBytes(
+		int64(len(data)),
+		"Uploading file ", fpath,
+	)
+	_, err = io.Copy(io.MultiWriter(f, bar), bytes.NewReader(data))
+	f.Sync()
+	f.Close()
+	bar.Close()
 	return err
 }
 
-func (c *SFTPClient) CreateDirectory(path string) error {
+func (c SFTPClient) CreateDirectory(path string) error {
 	return c.Client.MkdirAll(path)
 }
 
-func (c *SFTPClient) DeleteFile(path string) error {
+func (c SFTPClient) DeleteFile(path string) error {
 	if exists, err := c.Exist(path); err != nil {
 		return err
 	} else if exists {
 		return c.Client.Remove(path)
-	} else {
-		return fmt.Errorf("file %s does not exists", path)
 	}
+	return fmt.Errorf("file %s does not exists", path)
 }
 
-func (c *SFTPClient) DeleteDirectory(path string) error {
+func (c SFTPClient) DeleteDirectory(path string) error {
 	return c.Client.RemoveDirectory(path)
 }
 
-func (c *SFTPClient) List(path string) ([]string, error) {
+func (c SFTPClient) List(path string) ([]string, error) {
 	exist, err := c.Exist(path)
 	if err != nil {
 		return nil, err
 	} else if !exist {
-		return nil, fmt.Errorf("path %s does not exists!", path)
+		return nil, fmt.Errorf("path %s does not exists", path)
 	}
 	isDir, err := c.IsDir(path)
 	if err != nil {
 		return nil, err
 	}
 	if !isDir {
-		return nil, fmt.Errorf("path %s is not a dir!", path)
+		return nil, fmt.Errorf("path %s is not a dir", path)
 	}
 
 	walker := c.Client.Walk(path)
@@ -242,7 +264,7 @@ func (c *SFTPClient) List(path string) ([]string, error) {
 	return files, nil
 }
 
-func (c *SFTPClient) Exist(path string) (bool, error) {
+func (c SFTPClient) Exist(path string) (bool, error) {
 	_, err := c.Client.Lstat(path)
 	if err != nil && err.Error() == "file does not exist" {
 		return false, nil
@@ -250,14 +272,14 @@ func (c *SFTPClient) Exist(path string) (bool, error) {
 	return err == nil, err
 }
 
-func (c *SFTPClient) IsDir(path string) (bool, error) {
+func (c SFTPClient) IsDir(path string) (bool, error) {
 	lstat, err := c.Client.Lstat(path)
 	if err != nil {
 		return false, err
 	}
 	return lstat.IsDir(), nil
 }
-func (c *SFTPClient) IsFile(path string) (bool, error) {
+func (c SFTPClient) IsFile(path string) (bool, error) {
 	lstat, err := c.Client.Lstat(path)
 	if err != nil {
 		return false, err
@@ -265,10 +287,18 @@ func (c *SFTPClient) IsFile(path string) (bool, error) {
 	return !lstat.IsDir(), nil
 }
 
-func (c *SFTPClient) Close() error {
-	return c.Client.Close()
+func (c SFTPClient) Close() error {
+	if err := c.Client.Close(); err != nil {
+		log.Printf("Unable to close SFTP connection: %s", err.Error())
+		return err
+	}
+	if err := c.conn.Close(); err != nil {
+		log.Printf("Unable to close SSH connection: %s", err.Error())
+		return err
+	}
+	return nil
 }
 
-func (c *SFTPClient) Rename(fname, newName string) error {
+func (c SFTPClient) Rename(fname, newName string) error {
 	return c.Client.Rename(fname, newName)
 }

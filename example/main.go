@@ -15,17 +15,17 @@ func Test1() {
 		User:     "demo",
 		Password: "password",
 		Port:     22,
-		Bucket:   "bucket-ftp",
 		Timeout:  5,
 	}
 
+	var bucket = "bucket-ftp"
 	conn, err := sftpConf.NewConn("diffie-hellman-group-exchange-sha256")
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 	// Init the default configuration and initialize a new session
-	if _, err = conn.PutToS3("", nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
+	if _, err = conn.PutToS3("sft_folder", bucket, nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
 		panic(err)
 	}
 }
@@ -45,7 +45,6 @@ func Test2() {
 		User:     "alessiosavi",
 		Password: "",
 		Port:     22,
-		Bucket:   "bucket-ftp",
 		Timeout:  50,
 		PrivKey:  "",
 	}
@@ -57,6 +56,9 @@ func Test2() {
 	sftpConf.PrivKey = string(file)
 
 	conn, err := sftpConf.NewConn()
+	if err != nil {
+		panic(err)
+	}
 	defer conn.Close()
 	list, err := conn.List("/tmp")
 	if err != nil {
