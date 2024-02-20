@@ -25,7 +25,7 @@ func Test1() {
 	}
 	defer conn.Close()
 	// Init the default configuration and initialize a new session
-	if _, err = conn.PutToS3("sft_folder", bucket, nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
+	if _, err = conn.PutToS3("sftp_folder", bucket, nil, []string{"CUSTOM_PREFIX"}, renameFile); err != nil {
 		panic(err)
 	}
 }
