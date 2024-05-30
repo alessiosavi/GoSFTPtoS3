@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/alessiosavi/GoGPUtils/helper"
-	stringutils "github.com/alessiosavi/GoGPUtils/string"
-	"github.com/alessiosavi/GoSFTPtoS3"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/alessiosavi/GoGPUtils/helper"
+	"github.com/alessiosavi/GoSFTPtoS3"
 )
 
 func Test1() {
@@ -35,7 +35,7 @@ func Test1() {
 // In this case, we delete the initial path and return the other part of the file
 func renameFile(fName string) string {
 	s := strings.Split(fName, "/")
-	return stringutils.JoinSeparator("/", s[1:]...)
+	return strings.Join(s[1:], "/")
 }
 
 func Test2() {

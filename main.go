@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	arrayutils "github.com/alessiosavi/GoGPUtils/array"
-	s3utils "github.com/alessiosavi/GoGPUtils/aws/S3"
-	httputils "github.com/alessiosavi/GoGPUtils/http"
-	stringutils "github.com/alessiosavi/GoGPUtils/string"
-	"github.com/schollz/progressbar/v3"
 	"io"
 	"log"
 	"net"
 	"path"
+	"slices"
 	"strings"
 	"time"
+
+	s3utils "github.com/alessiosavi/GoGPUtils/aws/S3"
+	httputils "github.com/alessiosavi/GoGPUtils/http"
+	stringutils "github.com/alessiosavi/GoGPUtils/string"
+	"github.com/schollz/progressbar/v3"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -70,7 +71,7 @@ func (c SFTPClient) PutToS3(sftpFolder, bucket string, ignores, prefix []string,
 
 		fName := path.Base(currentPath)
 		// If prefix provided, verify that the filename start with it
-		if !stringutils.HasPrefixArray(prefix, fName) {
+		if !stringutils.HasPrefixes(prefix, fName) {
 			continue
 		}
 
@@ -90,7 +91,7 @@ func (c SFTPClient) PutToS3(sftpFolder, bucket string, ignores, prefix []string,
 			}
 			// Apply the given renaming function to rename the S3 file name
 			s3FileName := renameFile(currentPath)
-			log.Printf(fmt.Sprintf("Saving file %s in s3://%s/%s", currentPath, bucket, s3FileName))
+			log.Printf("Saving file %s in s3://%s/%s", currentPath, bucket, s3FileName)
 			if err = s3utils.PutObject(bucket, s3FileName, get.Bytes()); err != nil {
 				return nil, err
 			}
@@ -126,7 +127,7 @@ func (c *SFTPConf) Validate() error {
 // Example: first_folder/second_folder/file_name.txt --> second_folder/file_name.txt
 func RenameFile(fName string) string {
 	s := strings.Split(fName, "/")
-	return stringutils.JoinSeparator("/", s[1:]...)
+	return strings.Join(s[1:], "/")
 }
 
 // NewConn Create a new SFTP connection by given parameters
@@ -137,7 +138,7 @@ func (c SFTPConf) NewConn(keyExchanges ...string) (*SFTPClient, error) {
 
 	// Add default key exchange algorithm
 	for _, algo := range DEFAULT_KEY_EXCHANGE_ALGO {
-		if !arrayutils.InStrings(keyExchanges, algo) {
+		if !slices.Contains(keyExchanges, algo) {
 			keyExchanges = append(keyExchanges, algo)
 		}
 	}
